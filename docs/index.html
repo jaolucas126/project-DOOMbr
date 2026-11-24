@@ -783,82 +783,119 @@
                 setupTouchControls();
             }
 
-            function setupTouchControls() {
-    const buttons = mobileControls.querySelectorAll('.touch-btn');
+     function setupTouchControls() {
+    const controls = document.getElementById('mobile-controls');
+    const gameCanvas = document.getElementById('canvas');
+
+    if (!controls || !gameCanvas) {
+        console.error('DOOM: controles ou canvas não encontrados.');
+        return;
+    }
 
     const keyMap = {
-        ArrowUp:     { key: 'ArrowUp', code: 'ArrowUp' },
-        ArrowDown:   { key: 'ArrowDown', code: 'ArrowDown' },
-        ArrowLeft:   { key: 'ArrowLeft', code: 'ArrowLeft' },
-        ArrowRight:  { key: 'ArrowRight', code: 'ArrowRight' },
-        Space:       { key: ' ', code: 'Space' },
-        Escape:      { key: 'Escape', code: 'Escape' },
-        ShiftLeft:   { key: 'Shift', code: 'ShiftLeft' },
-        ControlLeft: { key: 'Control', code: 'ControlLeft' },
-        Comma:       { key: ',', code: 'Comma' },
-        Period:      { key: '.', code: 'Period' }
+        ArrowUp:     { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
+        ArrowDown:   { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
+        ArrowLeft:   { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 },
+        ArrowRight:  { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
+        Space:       { key: ' ', code: 'Space', keyCode: 32 },
+        Escape:      { key: 'Escape', code: 'Escape', keyCode: 27 },
+        ShiftLeft:   { key: 'Shift', code: 'ShiftLeft', keyCode: 16 },
+        ControlLeft: { key: 'Control', code: 'ControlLeft', keyCode: 17 },
+        Comma:       { key: ',', code: 'Comma', keyCode: 188 },
+        Period:      { key: '.', code: 'Period', keyCode: 190 }
     };
 
-    function sendKey(type, keyInfo) {
+    const pressed = new Set();
+
+    function sendKey(type, info) {
         const event = new KeyboardEvent(type, {
-            key: keyInfo.key,
-            code: keyInfo.code,
+            key: info.key,
+            code: info.code,
             bubbles: true,
             cancelable: true
         });
 
-        canvas.dispatchEvent(event);
-    }
-
-    function releaseButton(btn) {
-        const key = btn.dataset.key;
-        const keyInfo = keyMap[key];
-
-        if (!keyInfo || !btn.classList.contains('active')) return;
-
-        btn.classList.remove('active');
-        sendKey('keyup', keyInfo);
-    }
-
-    buttons.forEach(btn => {
-        const keyInfo = keyMap[btn.dataset.key];
-        if (!keyInfo) return;
-
-        btn.addEventListener('pointerdown', e => {
-            e.preventDefault();
-
-            if (btn.classList.contains('active')) return;
-
-            btn.classList.add('active');
-            canvas.focus();
-            
+        // Compatibilidade com sistemas que consultam keyCode/which
+        for (const property of ['keyCode', 'which']) {
             try {
-                btn.setPointerCapture(e.pointerId);
-            } catch (_) {}
+                Object.defineProperty(event, property, {
+                    get: () => info.keyCode
+                });
+            } catch (error) {}
+        }
 
-            sendKey('keydown', keyInfo);
+        // O evento sobe do canvas até document e window.
+        gameCanvas.dispatchEvent(event);
+    }
+
+    function releaseButton(button) {
+        if (!pressed.has(button)) return;
+
+        const info = keyMap[button.dataset.key];
+
+        pressed.delete(button);
+        button.classList.remove('active');
+
+        if (info) {
+            sendKey('keyup', info);
+        }
+    }
+
+    controls.querySelectorAll('.touch-btn').forEach(button => {
+        const info = keyMap[button.dataset.key];
+
+        if (!info) return;
+
+        button.style.touchAction = 'none';
+
+        button.addEventListener('pointerdown', event => {
+            event.preventDefault();
+
+            if (pressed.has(button)) return;
+
+            pressed.add(button);
+            button.classList.add('active');
+
+            gameCanvas.focus();
+
+            try {
+                button.setPointerCapture(event.pointerId);
+            } catch (error) {}
+
+            sendKey('keydown', info);
         });
 
-        const release = e => {
-            e.preventDefault();
-            releaseButton(btn);
-        };
-
-        btn.addEventListener('pointerup', release);
-        btn.addEventListener('pointercancel', release);
-        btn.addEventListener('lostpointercapture', () => {
-            releaseButton(btn);
+        button.addEventListener('pointerup', event => {
+            event.preventDefault();
+            releaseButton(button);
         });
 
-        btn.addEventListener('contextmenu', e => e.preventDefault());
+        button.addEventListener('pointercancel', event => {
+            event.preventDefault();
+            releaseButton(button);
+        });
+
+        button.addEventListener('lostpointercapture', () => {
+            releaseButton(button);
+        });
+
+        button.addEventListener('contextmenu', event => {
+            event.preventDefault();
+        });
     });
 
-    window.addEventListener('blur', () => {
-        buttons.forEach(releaseButton);
-    });
-}
-            
+    function releaseAll() {
+        controls.querySelectorAll('.touch-btn').forEach(releaseButton);
+    }
 
+    window.addEventListener('blur', releaseAll);
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) releaseAll();
+    });
+
+    console.log('DOOM: controles touch inicializados.');
+            }
             // IndexedDB Saves persistence
             const IDB_NAME = 'DOOM_SAVES_DB';
             const IDB_STORE = 'saves';
