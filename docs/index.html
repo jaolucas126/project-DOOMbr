@@ -808,23 +808,37 @@
     const pressed = new Set();
 
     function sendKey(type, info) {
+        // Cria um evento de teclado compatível com SDL2/Emscripten.
         const event = new KeyboardEvent(type, {
             key: info.key,
             code: info.code,
             bubbles: true,
-            cancelable: true
+            cancelable: true,
+            composed: true,
+            repeat: false
         });
 
-        // Compatibilidade com sistemas que consultam keyCode/which
-        for (const property of ['keyCode', 'which']) {
+        // Alguns navegadores Android não preenchem estes campos
+        // em KeyboardEvents criados pelo JavaScript.
+        const legacyFields = {
+            keyCode: info.keyCode,
+            which: info.keyCode,
+            charCode: 0,
+            location: 0
+        };
+
+        for (const [property, value] of Object.entries(legacyFields)) {
             try {
                 Object.defineProperty(event, property, {
-                    get: () => info.keyCode
+                    configurable: true,
+                    get: () => value
                 });
-            } catch (error) {}
+            } catch (error) {
+                // Mantém o evento moderno mesmo se o campo for somente leitura.
+            }
         }
 
-        // O evento sobe do canvas até document e window.
+        // O evento sobe do canvas até document e window, onde o SDL o recebe.
         gameCanvas.dispatchEvent(event);
     }
 
